@@ -1,0 +1,11 @@
+{
+  "domain": "home_intercom",
+  "name": "家庭广播 (Home Intercom)",
+  "codeowners": ["@wonderlandhongnoh"],
+  "config_flow": true,
+  "documentation": "https://github.com/C3H3-AI/home-intercom",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/C3H3-AI/home-intercom/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

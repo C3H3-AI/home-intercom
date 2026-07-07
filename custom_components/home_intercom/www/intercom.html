@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png">
+<link rel="apple-touch-icon" href="static/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f0f0f">
+
+<title>家庭广播</title>
+<script src="static/i18n.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0f0f0f;
+  color: #fff;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ──── Layout ──── */
+.container {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 16px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0 12px;
+}
+.header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.header h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ccc;
+  letter-spacing: 0.02em;
+}
+.header .ver {
+  font-size: 0.7rem;
+  color: #444;
+}
+.header .hint {
+  font-size: 0.8rem;
+  color: #555;
+  margin-top: 4px;
+}
+#lang-toggle {
+  background: none;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #888;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: color .2s, border-color .2s;
+}
+#lang-toggle:hover { color: #ccc; border-color: #666; }
+
+/* ──── Grid ──── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* ──── Broadcast card (全部) ──── */
+.broadcast-card {
+  grid-column: 1 / -1;
+  margin-bottom: 6px;
+  display: grid !important;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  justify-content: space-around;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 12px 16px;
+}
+.broadcast-card .room-header {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 1rem;
+}
+.broadcast-card .ptt-wrap {
+  grid-column: 2;
+  grid-row: 1;
+  width: 70px; height: 70px;
+}
+.broadcast-card .ptt-btn {
+  width: 100%; height: 100%;
+}
+.broadcast-card .status {
+  grid-column: 2;
+  grid-row: 2;
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* ──── Room card ──── */
+.room-card {
+  background: #1a1a1a;
+  border-radius: 20px;
+  padding: 16px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+  transition: background .3s, box-shadow .3s;
+  border: 1px solid #2a2a2a;
+}
+
+/* ──── Room header ──── */
+.room-header {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.room-icon {
+  font-size: 1.1rem;
+}
+.room-header .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #444;
+  transition: background .3s;
+}
+/* Dot state classes — used by pollSpeakerStatus + processAndSend */
+.dot-online  { background: #33d17a !important; box-shadow: 0 0 4px #33d17a; }
+.dot-error   { background: #c0392b !important; box-shadow: 0 0 4px #c0392b; }
+
+/* ──── PTT Button ──── */
+.ptt-wrap {
+  position: relative;
+  width: 120px; height: 120px;
+}
+.ptt-btn {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  border: none;
+  background: #252525;
+  box-shadow: 0 6px 16px rgba(0,0,0,.3), inset 0 1px 2px rgba(255,255,255,.06);
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+  transition: transform .15s ease, background .3s, box-shadow .3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ptt-btn:active {
+  transform: scale(0.96);
+}
+
+/* ──── Ripple waves ──── */
+.waves {
+  position: absolute;
+  inset: -16px;
+  z-index: 1;
+}
+.waves::before,
+.waves::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #33d17a;
+  opacity: 0;
+}
+
+/* ──── Sound bars icon ──── */
+.bars {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  justify-content: center;
+  height: 36px;
+  transition: opacity .25s, transform .25s;
+}
+.bars span {
+  width: 5px;
+  background: #666;
+  border-radius: 10px;
+  transition: background .3s, height .2s;
+}
+.bars span:nth-child(1) { height: 14px; }
+.bars span:nth-child(2) { height: 28px; }
+.bars span:nth-child(3) { height: 20px; }
+.bars span:nth-child(4) { height: 10px; }
+
+/* ──── Big checkmark (sent state) ──── */
+.checkmark {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 3.4rem;
+  font-weight: 700;
+  color: #fff;
+  animation: popIn .4s cubic-bezier(0.34,1.56,0.64,1);
+}
+.sent .checkmark {
+  display: flex;
+}
+.sent .bars {
+  opacity: 0;
+}
+@keyframes popIn {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ──── Status text ──── */
+.status {
+  font-size: 0.75rem;
+  color: #555;
+  height: 1.4em;
+  line-height: 1.4em;
+  text-align: center;
+  transition: color .3s;
+}
+
+/* ══════════════════════════════════════
+   STATES
+   ══════════════════════════════════════ */
+
+/* recording */
+.room-card.recording {
+  border-color: rgba(51,209,122,.4);
+  box-shadow: 0 0 24px rgba(51,209,122,.08);
+}
+.room-card.recording .ptt-btn {
+  background: #2a5038;
+  transform: scale(0.95);
+  box-shadow: inset 0 4px 14px rgba(0,0,0,.35);
+}
+.room-card.recording .status { color: #33d17a; }
+.room-card.recording .bars span { background: #33d17a; }
+
+/* wave animation */
+.room-card.recording .waves::before {
+  animation: ripple 2s ease-out infinite;
+}
+.room-card.recording .waves::after {
+  animation: ripple 2s ease-out infinite 1s;
+}
+@keyframes ripple {
+  0%   { transform: scale(1); opacity: .5; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+/* bar bounce */
+.room-card.recording .bars span {
+  animation: bounce .6s ease-in-out infinite alternate;
+}
+.room-card.recording .bars span:nth-child(2) { animation-delay: .1s; }
+.room-card.recording .bars span:nth-child(3) { animation-delay: .2s; }
+.room-card.recording .bars span:nth-child(4) { animation-delay: .3s; }
+@keyframes bounce {
+  from { transform: scaleY(.6); }
+  to   { transform: scaleY(1.3); }
+}
+
+/* sending */
+.room-card.sending {
+  border-color: rgba(51,209,122,.35);
+  box-shadow: 0 0 24px rgba(51,209,122,.08);
+}
+.room-card.sending .ptt-btn {
+  background: #2a5038;
+}
+.room-card.sending .bars { opacity: 0; }
+.room-card.sending .checkmark { display: none; }
+.room-card.sending .ptt-btn::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 3px solid rgba(51,209,122,.2);
+  border-top-color: #33d17a;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+.room-card.sending .status { color: #f0a030; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* sent */
+.room-card.sent {
+  border-color: rgba(51,209,122,.35);
+}
+.room-card.sent .ptt-btn {
+  background: #2a5038;
+}
+.room-card.sent .status { color: #33d17a; }
+
+/* broadcast card accent */
+.broadcast-card .room-header { color: #f0a030; font-weight: 600; }
+.broadcast-card .dot { display: none; }
+.broadcast-card.recording .status { color: #f0a030; }
+.broadcast-card.recording .ptt-btn { background: #503a20; }
+.broadcast-card.sent .ptt-btn { background: #503a20; }
+.broadcast-card .waves::before,
+.broadcast-card .waves::after { border-color: #f0a030; }
+/* ──── Modal / Settings ──── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 16px;
+  max-width: 520px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+.modal-box h2 { font-size: 1rem; margin: 0 0 16px; color: #ccc; }
+.modal-box .hint { font-size: .75rem; color: #555; margin-bottom: 16px; }
+.room-row {
+  background: #222;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  position: relative;
+}
+.room-row-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.room-row .room-name-label {
+  flex: 1;
+  font-size: .9rem;
+  color: #ccc;
+  font-weight: 500;
+}
+.room-row .room-entity-id {
+  font-size: .7rem;
+  color: #555;
+  margin-top: -2px;
+  margin-bottom: 6px;
+  font-family: monospace;
+}
+.room-row select {
+  width: 100%;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #ddd;
+  padding: 6px 10px;
+  font-size: .8rem;
+  margin-bottom: 0;
+}
+.room-row select:focus { outline: none; border-color: #33d17a; }
+.room-row .del-btn {
+  background: none;
+  border: 1px solid #622;
+  border-radius: 6px;
+  color: #c44;
+  font-size: .75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background .2s;
+  white-space: nowrap;
+}
+.add-room-btn {
+  width: 100%;
+  background: #1a3a1a;
+  border: 1px dashed #2a5a2a;
+  border-radius: 10px;
+  color: #3a3;
+  padding: 10px;
+  font-size: .85rem;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: background .2s;
+}
+.add-room-btn:hover { background: #1f4a1f; }
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.modal-actions button {
+  flex: 1;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: .85rem;
+  cursor: pointer;
+  border: none;
+  transition: opacity .2s;
+}
+.modal-actions .save-btn { background: #33d17a; color: #000; font-weight: 600; }
+.modal-actions .save-btn:hover { opacity: .85; }
+.modal-actions .cancel-btn { background: #333; color: #888; }
+.modal-actions .cancel-btn:hover { background: #444; }
+.settings-btn {
+  background: none;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #666;
+  font-size: 1rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color .2s, border-color .2s;
+  line-height: 1.4;
+}
+.settings-btn:hover { color: #aaa; border-color: #777; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <div>
+      <h1 id="app-title">📢 家庭广播</h1>
+      <p class="hint" id="app-hint">按住录音 · 松开发送</p>
+    </div>
+    <div class="header-right">
+      <button class="settings-btn" onclick="openSettings()" title="设置房间和音箱">⚙️</button>
+      <button id="lang-toggle" onclick="I18N.toggleLang()">EN</button>
+      <span class="ver" id="ver">…</span>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<!-- ──── Settings Modal ──── -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal-box">
+    <h2>⚙️ 房间设置</h2>
+    <p class="hint">管理音箱和房间。每个房间对应一个 media_player 实体。</p>
+    <div id="settings-rooms"></div>
+    <button class="add-room-btn" onclick="addRoomRow()">+ 添加房间</button>
+    <div class="modal-actions">
+      <button class="cancel-btn" onclick="closeSettings()">取消</button>
+      <button class="save-btn" onclick="saveSettings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- Shared with speaker.py EntityStatus / PlayError ---
+const EntityStatus = { ONLINE: "online", UNAVAILABLE: "unavailable", NO_PLAY_MEDIA: "no_play_media" };
+const PlayError   = { PLAY_FAILED: "play_failed", MA_FAILED: "ma_failed" };
+
+// API base: the PWA is served from /api/home_intercom/www/intercom.html,
+// so strip the "/www/..." suffix to get the integration API prefix.
+const API_BASE = (window.location.pathname.split('/www/')[0]) || '/api/home_intercom';
+
+const GRID = document.getElementById('grid');
+const RECORD_URL = API_BASE + '/record';
+// PCM target rate fetched from /version on startup
+let TARGET_RATE = 16000;  // fallback, overwritten by server
+
+let mediaRecorder = null;
+let audioChunks = [];
+let currentTarget = '';
+let currentCard = null;
+let ROOM_NAMES = {};
+
+// Room icon mapping (extensible, falls back to 📢)
+const ROOM_ICONS = {
+  all:     '📢',
+  living:  '🛋️',
+  bedroom: '🛏️',
+  study:   '📚',
+  cinema:  '🎬',
+};
+function roomIcon(target) {
+  return ROOM_ICONS[target] || '🔊';
+}
+
+function makeCard(target, name, isBroadcast) {
+  const card = document.createElement('div');
+  card.className = 'room-card' + (isBroadcast ? ' broadcast-card' : '');
+  card.id = 'card-' + target;
+
+  card.innerHTML = `
+    <div class="room-header">
+      <span class="room-icon">${roomIcon(target)}</span>
+      <span${isBroadcast ? ' data-i18n="broadcastAll"' : ` data-room-name="${target}"`}>${name}</span>
+      <span class="dot"></span>
+    </div>
+    <div class="ptt-wrap">
+      <div class="waves"></div>
+      <button class="ptt-btn">
+        <div class="bars">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="checkmark">✓</div>
+      </button>
+    </div>
+    <div class="status">${I18N.t('statusReady')}</div>
+  `;
+
+  const btn = card.querySelector('.ptt-btn');
+
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    btn.setPointerCapture(e.pointerId);
+    startRecording(target, card);
+  });
+  btn.addEventListener('pointerup', (e) => {
+    e.preventDefault();
+    stopRecording();
+  });
+  btn.addEventListener('lostpointercapture', () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
+  });
+  btn.addEventListener('touchstart', e => e.preventDefault());
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+
+  return card;
+}
+
+async function loadRooms() {
+  // Expose room data for i18n language switching
+  window._ROOM_DATA = {};
+  window._ROOM_DATA['all'] = { name: I18N.t('broadcastAll'), name_en: 'Broadcast All' };
+  ROOM_NAMES['all'] = I18N.t('broadcastAll');
+  GRID.appendChild(makeCard('all', I18N.t('broadcastAll'), true));
+
+  try {
+    const resp = await fetch(API_BASE + '/www/rooms.json');
+    const rooms = await resp.json();
+    for (const [key, room] of Object.entries(rooms)) {
+      window._ROOM_DATA[key] = room;
+      ROOM_NAMES[key] = room.name;
+      GRID.appendChild(makeCard(key, room.name, false));
+    }
+  } catch (e) {
+    const firstStatus = GRID.querySelector('.status');
+    if (firstStatus) firstStatus.textContent = I18N.t('statusLoadFailed');
+  }
+}
+
+function setCardState(card, state, msg) {
+  ['recording','sending','sent'].forEach(c => card.classList.remove(c));
+  if (state) card.classList.add(state);
+  card.querySelector('.status').textContent = msg;
+}
+
+async function startRecording(target, card) {
+  currentTarget = target;
+  currentCard = card;
+  audioChunks = [];
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+      mediaRecorder = null;
+      processAndSend();
+    };
+    mediaRecorder.start();
+    setCardState(card, 'recording', I18N.t('statusRecording'));
+  } catch (e) {
+    setCardState(card, '', I18N.t('micError') + e.message);
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    setCardState(currentCard, 'sending', I18N.t('statusSending'));
+  }
+}
+
+async function processAndSend() {
+  const webm = new Blob(audioChunks, { type: 'audio/webm' });
+  let sentCurrent = true;
+
+  try {
+    // Decode webm/opus → AudioBuffer (browser's native decoder)
+    const arrayBuf = await webm.arrayBuffer();
+    const actx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioBuf = await actx.decodeAudioData(arrayBuf);
+    const srcRate = audioBuf.sampleRate;
+    const srcData = audioBuf.getChannelData(0);
+    actx.close();
+
+    // Resample to TARGET_RATE using OfflineAudioContext
+    const duration = srcData.length / srcRate;
+    const offlineCtx = new OfflineAudioContext(1, Math.ceil(duration * TARGET_RATE), TARGET_RATE);
+    const bufferSrc = offlineCtx.createBufferSource();
+    const offlineBuf = offlineCtx.createBuffer(1, srcData.length, srcRate);
+    offlineBuf.copyToChannel(srcData, 0);
+    bufferSrc.buffer = offlineBuf;
+    bufferSrc.connect(offlineCtx.destination);
+    bufferSrc.start(0);
+
+    const rendered = await offlineCtx.startRendering();
+    const resampled = rendered.getChannelData(0);
+
+    // Float32 → Int16 PCM
+    const pcm = new Int16Array(resampled.length);
+    for (let i = 0; i < resampled.length; i++) {
+      const s = Math.max(-1, Math.min(1, resampled[i]));
+      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+
+    const resp = await fetch(RECORD_URL + '?target=' + currentTarget + '&rate=' + TARGET_RATE, {
+      method: 'POST', body: new Blob([new Uint8Array(pcm.buffer, 0, pcm.byteLength)]),
+    });
+
+    if (resp.ok) {
+      const data = await resp.json();
+      const errors = data.errors || [];
+      sentCurrent = true;  // show "sent" unless current card is an error card
+      if (errors.length > 0) {
+        // Map entity → room key for card lookup
+        const entityToKey = {};
+        for (const [key, room] of Object.entries(window._ROOM_DATA || {})) {
+          if (room.entity) entityToKey[room.entity] = key;
+        }
+        // Show error on each skipped room's card
+        for (const e of errors) {
+          const key = entityToKey[e.entity];
+          if (!key) continue;
+          const card = document.getElementById('card-' + key);
+          if (!card) continue;
+          if (card === currentCard) sentCurrent = false;
+          // Turn dot red
+          const dot = card.querySelector('.dot');
+          if (dot) dot.className = 'dot dot-error';
+          const msg = (e.error === EntityStatus.UNAVAILABLE || e.error === PlayError.PLAY_FAILED || e.error === PlayError.MA_FAILED)
+            ? I18N.t('statusUnavailable')
+            : I18N.t('statusSkipped');
+          setCardState(card, '', msg);
+        }
+      }
+      if (sentCurrent) setCardState(currentCard, 'sent', I18N.t('statusSent'));
+    } else {
+      setCardState(currentCard, '', I18N.t('statusFailed') + ' ' + resp.status);
+    }
+  } catch (e) {
+    setCardState(currentCard, '', I18N.t('statusNetworkError'));
+    console.error('processAndSend:', e);
+  }
+
+  setTimeout(() => {
+    if (currentCard && sentCurrent) setCardState(currentCard, '', I18N.t('statusReady'));
+  }, 1500);
+}
+
+async function pollSpeakerStatus() {
+  try {
+    const resp = await fetch(API_BASE + '/rooms/status');
+    const status = await resp.json();
+    for (const [key, state] of Object.entries(status)) {
+      const card = document.getElementById('card-' + key);
+      if (!card) continue;
+      const dot = card.querySelector('.dot');
+      if (state === EntityStatus.ONLINE) {
+        if (dot) dot.className = 'dot dot-online';
+      } else if (state === EntityStatus.NO_PLAY_MEDIA) {
+        if (dot) dot.className = 'dot dot-error';
+        const st = card.querySelector('.status');
+        if (st) st.textContent = I18N.t('statusSkipped');
+      } else {
+        // unavailable — same persistent error as no_play_media
+        if (dot) dot.className = 'dot dot-error';
+        const st = card.querySelector('.status');
+        if (st) st.textContent = I18N.t('statusUnavailable');
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+loadRooms();
+setTimeout(pollSpeakerStatus, 1000);
+setInterval(pollSpeakerStatus, 30000);
+
+// Show version number + fetch server config
+fetch(API_BASE + '/version').then(r => r.json()).then(d => {
+  document.getElementById('ver').textContent = d.version;
+  if (d.pcm_rate) TARGET_RATE = d.pcm_rate;
+}).catch(() => {
+  document.getElementById('ver').textContent = '';
+});
+
+// ──── Settings Modal ────
+let SETTINGS_ENTITIES = [];  // cached from GET /config
+
+async function openSettings() {
+  document.getElementById('settings-modal').classList.add('open');
+  try {
+    const resp = await fetch(API_BASE + '/config');
+    const data = await resp.json();
+    // 只保留可播放的实体（xiaomi_miot 或支持 play_media）
+    SETTINGS_ENTITIES = (data.entities || []).filter(e => e.playable);
+    renderSettings(data.rooms || {});
+  } catch (e) {
+    document.getElementById('settings-rooms').innerHTML = '<p style="color:#c44">加载失败: ' + e.message + '</p>';
+  }
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+function renderSettings(rooms) {
+  const container = document.getElementById('settings-rooms');
+  container.innerHTML = '';
+  for (const [key, room] of Object.entries(rooms)) {
+    const row = createRoomRow(key, room);
+    container.appendChild(row);
+    // 确保已有房间的显示名称和下拉同步
+    const sel = row.querySelector('.ri-entity');
+    if (sel) onRoomChange(sel);
+  }
+}
+
+function _shortId(eid) { return eid.replace('media_player.', ''); }
+
+function createRoomRow(key, room) {
+  const wrap = document.createElement('div');
+  wrap.className = 'room-row';
+  const selEntityId = room.entity || '';
+
+  const entityOpts = SETTINGS_ENTITIES.map(e =>
+    `<option value="${e.entity_id}"${e.entity_id === selEntityId ? ' selected' : ''}
+      data-platform="${e.platform || ''}" data-name="${e.name}">${e.name} (${_shortId(e.entity_id)})</option>`
+  ).join('');
+
+  const friendly = room.name || '';
+  const shortId = _shortId(selEntityId) || '';
+
+  wrap.innerHTML = `
+    <div class="room-row-header">
+      <span class="room-name-label">🔊 ${friendly || shortId || '新房间'}</span>
+      <button class="del-btn" onclick="this.closest('.room-row').remove()">删除</button>
+    </div>
+    <div class="room-entity-id">${shortId || '请选择音箱'}</div>
+    <select class="ri-entity" onchange="onRoomChange(this)">${entityOpts}</select>
+  `;
+  return wrap;
+}
+
+function onRoomChange(sel) {
+  const row = sel.closest('.room-row');
+  const opt = sel.selectedOptions[0];
+  if (!opt) return;
+  row.querySelector('.room-name-label').textContent = '🔊 ' + (opt.getAttribute('data-name') || _shortId(opt.value));
+  row.querySelector('.room-entity-id').textContent = _shortId(opt.value);
+}
+
+function addRoomRow() {
+  const container = document.getElementById('settings-rooms');
+  const row = createRoomRow('new', { entity: '', name: '' });
+  container.appendChild(row);
+  const sel = row.querySelector('.ri-entity');
+  if (sel && sel.options.length > 0) { sel.selectedIndex = 0; onRoomChange(sel); }
+}
+
+async function saveSettings() {
+  const rows = document.querySelectorAll('#settings-rooms .room-row');
+  const rooms = {}, used = new Set();
+  for (const row of rows) {
+    const sel = row.querySelector('.ri-entity');
+    const opt = sel.selectedOptions[0];
+    if (!opt || !opt.value) continue;
+    if (used.has(opt.value)) continue;
+    used.add(opt.value);
+    const key = _shortId(opt.value);
+    const name = opt.getAttribute('data-name') || key;
+    rooms[key] = { name, name_en: name, entity: opt.value };
+    if (opt.getAttribute('data-platform') === 'xiaomi_miot' || opt.getAttribute('data-platform') === 'xiaomi') rooms[key].play_method = 'xiaomi_miot';
+  }
+  if (Object.keys(rooms).length === 0) {
+    alert('至少需要一个房间');
+    return;
+  }
+  try {
+    const resp = await fetch(API_BASE + '/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rooms }),
+    });
+    const data = await resp.json();
+    if (!data.ok) { alert('保存失败: ' + (data.error || resp.status)); return; }
+    // Reload UI
+    closeSettings();
+    location.reload();
+  } catch (e) {
+    alert('保存失败: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>
