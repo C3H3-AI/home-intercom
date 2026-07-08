@@ -1,0 +1,33 @@
+announce:
+  name: 广播
+  description: >-
+    向指定房间广播语音消息或播放音频 URL。
+    支持所有已配置的房间（通过配置中心设置），以及 "all" 广播到全部房间。
+  fields:
+    room:
+      name: 房间
+      description: >-
+        房间标识（如 "living"、"xiaomi_pro"），或 "all" 广播到所有房间。
+        房间列表在配置中心中设置。
+      example: "all"
+      required: true
+      selector:
+        text:
+    url:
+      name: 音频 URL
+      description: >-
+        要播放的音频文件 URL。如果提供此参数则直接播放音频；
+        如果未提供则使用 message 参数通过 TTS 生成语音。
+      example: "https://example.com/announcement.wav"
+      required: false
+      selector:
+        text:
+    message:
+      name: 文本消息
+      description: >-
+        要广播的文本内容。当未提供 url 时使用。
+        系统会用 HA 的 TTS 引擎将文字转为语音播放。
+      example: "开饭了，快来餐厅"
+      required: false
+      selector:
+        text:

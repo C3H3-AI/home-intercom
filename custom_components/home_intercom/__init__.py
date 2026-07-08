@@ -81,6 +81,60 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.http.register_view(VersionView())
     hass.http.register_view(ConfigView())
 
+    # Register announce service for automations
+    async def _async_announce_handler(call) -> None:
+        """Handle home_intercom.announce service call."""
+        room_key = call.data.get("room", "all")
+        url = call.data.get("url", "")
+        message = call.data.get("message", "")
+
+        store = hass.data[DOMAIN]["store"]
+        spk: Speaker = hass.data[DOMAIN]["speaker"]
+        room_map = store["rooms"]
+
+        # Determine target rooms
+        if room_key == "all":
+            targets = [(k, v) for k, v in room_map.items() if v.get("entity")]
+        elif room_key in room_map:
+            targets = [(room_key, room_map[room_key])]
+        else:
+            _LOGGER.warning("[intercom] announce: unknown room %s", room_key)
+            return
+
+        for key, room in targets:
+            entity_id = room["entity"]
+            play_method = room.get("play_method")
+
+            if url:
+                # Direct audio URL — use existing broadcast pipeline
+                await spk.play_and_auto_pause(
+                    entity_id, url, duration=30.0, play_method=play_method,
+                )
+                _LOGGER.info("[intercom] announce %s -> %s (url)", key, entity_id)
+            elif message:
+                # TTS: use HA's built-in tts.speak service
+                try:
+                    await hass.services.async_call(
+                        "tts", "speak",
+                        {"entity_id": entity_id, "message": message},
+                        blocking=True,
+                    )
+                    _LOGGER.info(
+                        "[intercom] announce %s -> %s (tts: %r)",
+                        key, entity_id, message[:40],
+                    )
+                except Exception as exc:
+                    _LOGGER.error(
+                        "[intercom] announce %s -> %s tts failed: %s",
+                        key, entity_id, exc,
+                    )
+            else:
+                _LOGGER.warning(
+                    "[intercom] announce: no url or message for %s", key,
+                )
+
+    hass.services.async_register(DOMAIN, "announce", _async_announce_handler)
+
     # Sidebar iframe panel -> the PWA.
     try:
         await async_register_built_in_panel(
