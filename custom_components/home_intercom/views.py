@@ -25,6 +25,8 @@ import wave
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN, PCM_RATE, PCM_BPS, WAV_MAGIC, WAV_HEADER_SIZE
 
@@ -191,6 +193,8 @@ class ConfigView(HomeAssistantView):
 
         PLAY_MEDIA = 512  # MediaPlayerEntityFeature
         reg = er.async_get(hass)
+        area_reg = ar.async_get(hass)
+        dev_reg = dr.async_get(hass)
         entities = []
         for state in hass.states.async_all("media_player"):
             eid = state.entity_id
@@ -198,14 +202,26 @@ class ConfigView(HomeAssistantView):
                 continue
 
             platform = None
+            area_name = None
             if reg:
                 ent_entry = reg.async_get(eid)
                 if ent_entry:
                     platform = ent_entry.platform
+                    area_id = ent_entry.area_id
+                    # Device-level fallback: an entity inherits the area of
+                    # its device when it has no area_id of its own.
+                    if not area_id and ent_entry.device_id and dev_reg:
+                        dev_entry = dev_reg.async_get(ent_entry.device_id)
+                        if dev_entry:
+                            area_id = dev_entry.area_id
+                    if area_id and area_reg:
+                        area = area_reg.async_get_area(area_id)
+                        area_name = area.name if area else None
 
             sf = state.attributes.get("supported_features", 0)
-            # Playable if: xiaomi platform (send_command) OR has PLAY_MEDIA flag
-            playable = (platform and ("miot" in platform or platform == "xiaomi")) or bool(sf & PLAY_MEDIA)
+            # All media_player entities are shown — the actual playback
+            # error handling is done by speaker.py at broadcast time.
+            playable = True
 
             entities.append({
                 "entity_id": eid,
@@ -213,6 +229,7 @@ class ConfigView(HomeAssistantView):
                 "state": state.state,
                 "platform": platform,
                 "playable": playable,
+                "area": area_name,
             })
 
         # Sort: playable first, then by name

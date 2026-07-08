@@ -1,7 +1,7 @@
 """Constants for the Home Intercom integration."""
 
 DOMAIN = "home_intercom"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 # ——— PCM / WAV handling ———
 PCM_RATE = 16000  # target sample rate (Hz) for Xiaomi speaker WAV output

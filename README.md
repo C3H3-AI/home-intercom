@@ -95,3 +95,18 @@
 
 - `/api/home_intercom/*` 视图 `requires_auth=False`，仅适合可信 LAN 环境（与原版一致）
 - iframe 面板的「添加到主屏幕」能力受限，但 push-to-talk 功能不受影响
+
+## 更新日志
+
+### v1.1.1
+- 修复设置面板「房间名」：房间名改为可独立编辑输入框，保存时真正写回（不再被设备名覆盖）
+- 房间名自动采用 HA 设备分配的房间(area)：后端 ConfigView 返回每个 media_player 的 area，前端打开设置即预填
+- 修复 area 解析盲区：HA 房间挂在设备层，实体通过 device_id 继承；补充 device_registry 回退（实体级 area_id → 否则设备级 area_id），小米音箱正确带出「客厅」
+- 顺手修复前端 option 的 data-name / data-platform 未转义的历史隐患
+- 新增 HA 注册表与实体-房间解析研究报告（docs/）
+
+### v1.1.0
+- 新增 `home_intercom.announce` 服务：支持 room 指定房间 / url 音频直播 / message TTS 语音广播
+
+### v1.0.0
+- 原生 HA 集成首发：侧边栏 PWA 对讲面板、自动发现可播音箱、小米 MIoT 自动适配、面板内房间配置

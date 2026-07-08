@@ -366,6 +366,18 @@ body {
   color: #ccc;
   font-weight: 500;
 }
+.room-row input.ri-name {
+  flex: 1;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #ddd;
+  padding: 6px 10px;
+  font-size: .9rem;
+  font-weight: 500;
+}
+.room-row input.ri-name:focus { outline: none; border-color: #33d17a; }
+.room-row input.ri-name::placeholder { color: #555; }
 .room-row .room-entity-id {
   font-size: .7rem;
   color: #555;
@@ -555,8 +567,10 @@ async function loadRooms() {
   GRID.appendChild(makeCard('all', I18N.t('broadcastAll'), true));
 
   try {
-    const resp = await fetch(API_BASE + '/www/rooms.json');
-    const rooms = await resp.json();
+    const resp = await fetch(API_BASE + '/config');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'load failed');
+    const rooms = data.rooms;
     for (const [key, room] of Object.entries(rooms)) {
       window._ROOM_DATA[key] = room;
       ROOM_NAMES[key] = room.name;
@@ -723,8 +737,8 @@ async function openSettings() {
   try {
     const resp = await fetch(API_BASE + '/config');
     const data = await resp.json();
-    // 只保留可播放的实体（xiaomi_miot 或支持 play_media）
-    SETTINGS_ENTITIES = (data.entities || []).filter(e => e.playable);
+    // 显示所有媒体播放器实体（能否播放由后端运行时决定）
+    SETTINGS_ENTITIES = (data.entities || []);
     renderSettings(data.rooms || {});
   } catch (e) {
     document.getElementById('settings-rooms').innerHTML = '<p style="color:#c44">加载失败: ' + e.message + '</p>';
@@ -739,15 +753,16 @@ function renderSettings(rooms) {
   const container = document.getElementById('settings-rooms');
   container.innerHTML = '';
   for (const [key, room] of Object.entries(rooms)) {
-    const row = createRoomRow(key, room);
-    container.appendChild(row);
-    // 确保已有房间的显示名称和下拉同步
-    const sel = row.querySelector('.ri-entity');
-    if (sel) onRoomChange(sel);
+    container.appendChild(createRoomRow(key, room));
   }
 }
 
 function _shortId(eid) { return eid.replace('media_player.', ''); }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
 
 function createRoomRow(key, room) {
   const wrap = document.createElement('div');
@@ -756,18 +771,21 @@ function createRoomRow(key, room) {
 
   const entityOpts = SETTINGS_ENTITIES.map(e =>
     `<option value="${e.entity_id}"${e.entity_id === selEntityId ? ' selected' : ''}
-      data-platform="${e.platform || ''}" data-name="${e.name}">${e.name} (${_shortId(e.entity_id)})</option>`
+      data-platform="${esc(e.platform || '')}" data-name="${esc(e.name)}" data-area="${esc(e.area || '')}">${esc(e.name)} (${_shortId(e.entity_id)})</option>`
   ).join('');
 
   const friendly = room.name || '';
+  // 未显式设置房间名时，直接采用 HA 设备分配的房间（area）
+  const entArea = (SETTINGS_ENTITIES.find(e => e.entity_id === selEntityId) || {}).area || '';
+  const defaultName = friendly || entArea;
   const shortId = _shortId(selEntityId) || '';
 
   wrap.innerHTML = `
     <div class="room-row-header">
-      <span class="room-name-label">🔊 ${friendly || shortId || '新房间'}</span>
+      <input class="ri-name" value="${esc(defaultName)}" placeholder="房间名称">
       <button class="del-btn" onclick="this.closest('.room-row').remove()">删除</button>
     </div>
-    <div class="room-entity-id">${shortId || '请选择音箱'}</div>
+    <div class="room-entity-id">${esc(shortId) || '请选择音箱'}</div>
     <select class="ri-entity" onchange="onRoomChange(this)">${entityOpts}</select>
   `;
   return wrap;
@@ -777,8 +795,14 @@ function onRoomChange(sel) {
   const row = sel.closest('.room-row');
   const opt = sel.selectedOptions[0];
   if (!opt) return;
-  row.querySelector('.room-name-label').textContent = '🔊 ' + (opt.getAttribute('data-name') || _shortId(opt.value));
+  // 仅更新设备短ID显示
   row.querySelector('.room-entity-id').textContent = _shortId(opt.value);
+  // 房间名为空时，自动采用 HA 设备分配的房间（area）作为默认名
+  const nameInput = row.querySelector('.ri-name');
+  if (nameInput && !nameInput.value.trim()) {
+    const area = opt.getAttribute('data-area') || '';
+    if (area) nameInput.value = area;
+  }
 }
 
 function addRoomRow() {
@@ -799,7 +823,8 @@ async function saveSettings() {
     if (used.has(opt.value)) continue;
     used.add(opt.value);
     const key = _shortId(opt.value);
-    const name = opt.getAttribute('data-name') || key;
+    const nameInput = row.querySelector('.ri-name');
+    const name = (nameInput && nameInput.value.trim()) || opt.getAttribute('data-name') || key;
     rooms[key] = { name, name_en: name, entity: opt.value };
     if (opt.getAttribute('data-platform') === 'xiaomi_miot' || opt.getAttribute('data-platform') === 'xiaomi') rooms[key].play_method = 'xiaomi_miot';
   }
