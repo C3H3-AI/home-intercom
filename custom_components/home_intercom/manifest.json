@@ -1,6 +1,7 @@
 {
   "domain": "home_intercom",
   "name": "家庭广播 (Home Intercom)",
+  "after_dependencies": ["http"],
   "codeowners": ["@wonderlandhongnoh"],
   "config_flow": true,
   "dependencies": [],
